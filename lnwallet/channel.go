@@ -3931,28 +3931,15 @@ func (lc *LightningChannel) ProcessChanSyncMsg(
 	// their correctness first, as it will influence our decisions below.
 	hasRecoveryOptions := msg.LocalUnrevokedCommitPoint != nil
 	if hasRecoveryOptions && msg.RemoteCommitTailHeight != 0 {
-		// We'll check that they've really sent a valid commit
-		// secret from our shachain for our prior height, but only if
-		// this isn't the first state.
-		heightSecret, err := lc.channelState.RevocationProducer.AtIndex(
-			msg.RemoteCommitTailHeight - 1,
-		)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		commitSecretCorrect := bytes.Equal(
-			heightSecret[:], msg.LastRemoteCommitSecret[:],
-		)
+		commitPoint := msg.LocalUnrevokedCommitPoint
+		lc.log.Debugf("Peer sent commit_point=%x for chan_id=%v",
+			commitPoint.SerializeCompressed(), msg.ChanID.String())
 
-		// If the commit secret they sent is incorrect then we'll fail
-		// the channel as the remote node has an inconsistent state.
-		if !commitSecretCorrect {
-			// In this case, we'll return an error to indicate the
-			// remote node sent us the wrong values. This will let
-			// the caller act accordingly.
-			lc.log.Errorf("sync failed: remote provided invalid " +
-				"commit secret!")
-			return nil, nil, nil, ErrInvalidLastCommitSecret
+		// To avoid running into a panic, we now discontinue the channel
+		// by marking it as borked.
+		return nil, nil, nil, &ErrCommitSyncLocalDataLoss{
+			ChannelPoint: lc.channelState.FundingOutpoint,
+			CommitPoint:  msg.LocalUnrevokedCommitPoint,
 		}
 	}
 
@@ -3985,8 +3972,12 @@ func (lc *LightningChannel) ProcessChanSyncMsg(
 			"believes our tail height is %v, while we have %v!",
 			msg.RemoteCommitTailHeight, localTailHeight)
 
+		commitPoint := msg.LocalUnrevokedCommitPoint
 		if isRestoredChan {
-			lc.log.Warnf("detected restored triggering DLP")
+			lc.log.Warnf("detected restored triggering DLP, peer "+
+				"sent commit_point=%x for chan_id=%v",
+				commitPoint.SerializeCompressed(),
+				msg.ChanID.String())
 		}
 
 		// We must check that we had recovery options to ensure the
