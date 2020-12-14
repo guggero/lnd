@@ -35,6 +35,10 @@ type Options struct {
 	// wait before attempting to commit a pending set of updates.
 	BatchCommitInterval time.Duration
 
+	// ReadOnly specifies if the underlying bolt DB should be opened in read
+	// only mode (useful for recovery).
+	ReadOnly bool
+
 	// clock is the time source used by the database.
 	clock clock.Clock
 
@@ -54,6 +58,7 @@ func DefaultOptions() Options {
 		},
 		RejectCacheSize:  DefaultRejectCacheSize,
 		ChannelCacheSize: DefaultChannelCacheSize,
+		ReadOnly:         false,
 		clock:            clock.NewDefaultClock(),
 	}
 }
@@ -102,6 +107,13 @@ func OptionAutoCompactMinAge(minAge time.Duration) OptionModifier {
 func OptionSetBatchCommitInterval(interval time.Duration) OptionModifier {
 	return func(o *Options) {
 		o.BatchCommitInterval = interval
+	}
+}
+
+// OptionReadOnly allows the database to be opened in read only mode.
+func OptionReadOnly(b bool) OptionModifier {
+	return func(o *Options) {
+		o.ReadOnly = b
 	}
 }
 
