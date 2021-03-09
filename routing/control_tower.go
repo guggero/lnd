@@ -1,8 +1,10 @@
 package routing
 
 import (
+	"fmt"
 	"sync"
 
+	"github.com/go-errors/errors"
 	"github.com/lightningnetwork/lnd/channeldb"
 	"github.com/lightningnetwork/lnd/lntypes"
 	"github.com/lightningnetwork/lnd/multimutex"
@@ -40,6 +42,19 @@ type ControlTower interface {
 	// FetchPayment fetches the payment corresponding to the given payment
 	// hash.
 	FetchPayment(paymentHash lntypes.Hash) (*channeldb.MPPayment, error)
+
+	// CancelPayment registers the intent to cancel the payment
+	// corresponding to the given payment hash. No further HTLC attempts
+	// will be made.
+	//
+	// NOTE: A payment with outstanding shards/HTLCs is not terminated
+	// immediately. The cancellation intent is best effort and is not
+	// persisted across restarts.
+	CancelPayment(paymentHash lntypes.Hash) error
+
+	// ShouldCancelPayment returns true if an intent to cancel a payment
+	// with the given payment hash was registered.
+	ShouldCancelPayment(paymentHash lntypes.Hash) bool
 
 	// Fail transitions a payment into the Failed state, and records the
 	// ultimate reason the payment failed. Note that this should only be
@@ -104,14 +119,17 @@ type controlTower struct {
 	// that no race conditions occur in between updating the database and
 	// sending a notification.
 	paymentsMtx *multimutex.HashMutex
+
+	cancelIntents map[lntypes.Hash]struct{}
 }
 
 // NewControlTower creates a new instance of the controlTower.
 func NewControlTower(db *channeldb.PaymentControl) ControlTower {
 	return &controlTower{
-		db:          db,
-		subscribers: make(map[lntypes.Hash][]*ControlTowerSubscriber),
-		paymentsMtx: multimutex.NewHashMutex(),
+		db:            db,
+		subscribers:   make(map[lntypes.Hash][]*ControlTowerSubscriber),
+		paymentsMtx:   multimutex.NewHashMutex(),
+		cancelIntents: make(map[lntypes.Hash]struct{}),
 	}
 }
 
@@ -191,6 +209,39 @@ func (p *controlTower) FetchPayment(paymentHash lntypes.Hash) (
 	return p.db.FetchPayment(paymentHash)
 }
 
+// CancelPayment terminates the payment corresponding to a given payment hash.
+func (p *controlTower) CancelPayment(paymentHash lntypes.Hash) error {
+	// Should we return early if the payment hash does not
+	// correspond to an active payment?
+	payment, err := p.FetchPayment(paymentHash)
+	if err != nil {
+		return err
+	}
+
+	if payment.Status != channeldb.StatusInFlight {
+		return errors.New(fmt.Sprintf("cannot cancel payment that "+
+			"is not IN-FLIGHT (payment_status=%s)",
+			payment.Status.String()))
+	}
+
+	p.paymentsMtx.Lock(paymentHash)
+	defer p.paymentsMtx.Unlock(paymentHash)
+
+	p.cancelIntents[paymentHash] = struct{}{}
+
+	return nil
+}
+
+// ShouldCancelPayment returns true if an intent to cancel a payment with the
+// given payment hash was registered.
+func (p *controlTower) ShouldCancelPayment(paymentHash lntypes.Hash) bool {
+	p.paymentsMtx.Lock(paymentHash)
+	defer p.paymentsMtx.Unlock(paymentHash)
+
+	_, ok := p.cancelIntents[paymentHash]
+	return ok
+}
+
 // Fail transitions a payment into the Failed state, and records the reason the
 // payment failed. After invoking this method, InitPayment should return nil on
 // its next call for this payment hash, allowing the switch to make a
@@ -208,6 +259,10 @@ func (p *controlTower) Fail(paymentHash lntypes.Hash,
 
 	// Notify subscribers of fail event.
 	p.notifySubscribers(paymentHash, payment)
+
+	// Remove the cancellation intent (there only is one if the user
+	// requested the payment to be canceled).
+	delete(p.cancelIntents, paymentHash)
 
 	return nil
 }

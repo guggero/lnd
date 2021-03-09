@@ -1066,6 +1066,9 @@
         }
       }
     },
+    "routerrpcCancelPaymentResponse": {
+      "type": "object"
+    },
     "routerrpcChanStatusAction": {
       "type": "string",
       "enum": [

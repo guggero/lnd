@@ -94,6 +94,14 @@ const (
 	// allow it to respond to our test with a route.
 	routeRelease = "PaymentSession:release"
 
+	// routerCancelPayment is a test step where we expect the router
+	// to call the CancelPayment method on the control tower.
+	routerCancelPayment = "Router:cancel-payment"
+
+	// cancelPayment is a test step where we expect the router
+	// to call the CancelPayment method on the control tower.
+	cancelPayment = "CancelPayment"
+
 	// sendToSwitchSuccess is a step where we expect the router to
 	// call send the payment attempt to the switch, and we will
 	// respond with a non-error, indicating that the payment
@@ -417,6 +425,104 @@ func TestRouterPaymentStateMachine(t *testing.T) {
 			routes:     []*route.Route{rt},
 			paymentErr: channeldb.FailureReasonNoRoute,
 		},
+		{
+			// Tests that we are able to cancel a payment
+			steps: []string{
+				routerInitPayment,
+				routerRegisterAttempt,
+				sendToSwitchSuccess,
+
+				// Cancel the payment
+				// NOTE: CancelPayment is one of the few, if not
+				// the only mechanisms we expose to the user
+				// to intervene in the payment lifecycle
+				// (route finding, payment sharding, htlc attempts)
+				cancelPayment,
+
+				// Make the first attempt fail.
+				getPaymentResultTempFailure,
+				routerFailAttempt,
+
+				// Verify that the Router called CancelPayment
+				routerCancelPayment,
+
+				// Payment should fail with
+				// reason which indicates the
+				// payement was canceled
+				routerFailPayment,
+				paymentError,
+
+				// NOTE: We need to test that
+				// Payments are not hard aborted with
+				// outstanding HTLCs
+			},
+			routes: []*route.Route{rt, rt},
+		},
+		{
+			// Tests that payment cancellation behaves
+			// properly in MPP case
+			steps: []string{
+				// NOTE: We need to test that
+				// Payments are not hard aborted with
+				// outstanding HTLCs
+
+				routerInitPayment,
+
+				// shard 0
+				routerRegisterAttempt,
+				sendToSwitchSuccess,
+
+				// shard 1
+				routerRegisterAttempt,
+				sendToSwitchSuccess,
+
+				// shard 2
+				routerRegisterAttempt,
+				sendToSwitchSuccess,
+
+				// shard 3
+				routerRegisterAttempt,
+				sendToSwitchSuccess,
+
+				// Cancel the payment
+				// NOTE: CancelPayment is one of the few, if not
+				// the only mechanisms we expose to the user
+				// to intervene in the payment lifecycle
+				// (route finding, payment sharding, htlc attempts)
+				cancelPayment,
+
+				// Verify that the Router called CancelPayment
+				routerCancelPayment,
+
+				// The first shard fail with a temp error
+				getPaymentResultTempFailure,
+				routerFailAttempt,
+
+				// // The first shard fail with a terminal error.
+				// getPaymentResultTerminalFailure,
+				// routerFailAttempt,
+				// routerFailPayment,
+
+				// Remaining 3 shards fail.
+				getPaymentResultTempFailure,
+				getPaymentResultTempFailure,
+				getPaymentResultTempFailure,
+				routerFailAttempt,
+				routerFailAttempt,
+				routerFailAttempt,
+
+				// Payment should fail with
+				// reason which indicates the
+				// payment was canceled
+				routerFailPayment,
+				paymentError,
+				// // Payment fails.
+				// paymentError,
+			},
+			routes: []*route.Route{
+				rt, rt, rt, rt, rt, rt,
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -440,6 +546,7 @@ func testPaymentLifecycle(t *testing.T, test paymentLifecycleTestCase,
 	control.init = make(chan initArgs)
 	control.registerAttempt = make(chan registerAttemptArgs)
 	control.settleAttempt = make(chan settleAttemptArgs)
+	control.cancelAttempt = make(chan bool, 20)
 	control.failAttempt = make(chan failAttemptArgs)
 	control.failPayment = make(chan failPaymentArgs)
 	control.fetchInFlight = make(chan struct{})
@@ -558,6 +665,7 @@ func testPaymentLifecycle(t *testing.T, test paymentLifecycleTestCase,
 	}()
 
 	var resendResult chan error
+	var cancelResult chan error
 	for i, step := range test.steps {
 		i, step := i, step
 
@@ -639,6 +747,19 @@ func testPaymentLifecycle(t *testing.T, test paymentLifecycleTestCase,
 					"registered with control")
 			}
 
+		// In this step we expect the router to call the
+		// ControlTower's CancelPayment method, to indicate
+		// that the payment was canceled.
+		case routerCancelPayment:
+			select {
+			case shouldCancel := <-control.cancelAttempt:
+				t.Log("[inside payment lifecycle test]: "+
+					"Should Cancel? - ", shouldCancel)
+			case <-time.After(stepTimeout):
+				t.Fatalf("payment cancelation not " +
+					"registered with control")
+			}
+
 		// In this step we expect the SendToSwitch method to be
 		// called, and we respond with a nil-error.
 		case sendToSwitchSuccess:
@@ -706,6 +827,18 @@ func testPaymentLifecycle(t *testing.T, test paymentLifecycleTestCase,
 			case <-time.After(stepTimeout):
 				fatal("unable to get result")
 			}
+
+		// Simulate CancelPayment API call
+		case cancelPayment:
+			cancelResult = make(chan error)
+			t.Log("[inside PaymentLifecycle]: Simulating " +
+				"CancelPayment API call")
+			go func() {
+				err := router.CancelPayment(payment.Identifier())
+				t.Logf("[inside PaymentLifecycle]: payment - "+
+					"%+v\n", payment.Identifier())
+				cancelResult <- err
+			}()
 
 		// In this step we manually try to resend the same
 		// payment, making sure the router responds with an

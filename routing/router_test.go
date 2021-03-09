@@ -292,7 +292,7 @@ func TestFindRoutesWithFeeLimit(t *testing.T) {
 // TestSendPaymentRouteFailureFallback tests that when sending a payment, if
 // one of the target routes is seen as unavailable, then the next route in the
 // queue is used instead. This process should continue until either a payment
-// succeeds, or all routes have been exhausted.
+// succeeds, or all routes have been exhausted (or the payment is canceled).
 func TestSendPaymentRouteFailureFallback(t *testing.T) {
 	t.Parallel()
 
@@ -3608,6 +3608,7 @@ func TestSendMPPaymentSucceed(t *testing.T) {
 			}
 		}
 	})
+	controlTower.On("ShouldCancelPayment", mock.Anything).Return(false)
 
 	// Call the actual method SendPayment on router. This is place inside a
 	// goroutine so we can set a timeout for the whole test, in case
@@ -3708,6 +3709,7 @@ func TestSendMPPaymentSucceedOnExtraShards(t *testing.T) {
 	session := &mockPaymentSession{}
 	sessionSource.On("NewPaymentSession", req).Return(session, nil)
 	controlTower.On("InitPayment", identifier, mock.Anything).Return(nil)
+	controlTower.On("ShouldCancelPayment", mock.Anything).Return(false)
 
 	// The following mocked methods are called inside resumePayment. Note
 	// that the payment object below will determine the state of the
@@ -3916,6 +3918,7 @@ func TestSendMPPaymentFailed(t *testing.T) {
 	session := &mockPaymentSession{}
 	sessionSource.On("NewPaymentSession", req).Return(session, nil)
 	controlTower.On("InitPayment", identifier, mock.Anything).Return(nil)
+	controlTower.On("ShouldCancelPayment", mock.Anything).Return(false)
 
 	// The following mocked methods are called inside resumePayment. Note
 	// that the payment object below will determine the state of the
@@ -4119,6 +4122,7 @@ func TestSendMPPaymentFailedWithShardsInFlight(t *testing.T) {
 	session := &mockPaymentSession{}
 	sessionSource.On("NewPaymentSession", req).Return(session, nil)
 	controlTower.On("InitPayment", identifier, mock.Anything).Return(nil)
+	controlTower.On("ShouldCancelPayment", mock.Anything).Return(false)
 
 	// The following mocked methods are called inside resumePayment. Note
 	// that the payment object below will determine the state of the

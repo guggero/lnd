@@ -1967,6 +1967,12 @@ func (r *ChannelRouter) SendPaymentAsync(payment *LightningPayment) error {
 	return nil
 }
 
+// CancelPayment informs the control tower that the specified payment is to be
+// canceled.
+func (r *ChannelRouter) CancelPayment(paymentHash lntypes.Hash) error {
+	return r.cfg.Control.CancelPayment(paymentHash)
+}
+
 // spewPayment returns a log closures that provides a spewed string
 // representation of the passed payment.
 func spewPayment(payment *LightningPayment) logClosure {

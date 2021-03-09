@@ -17,6 +17,12 @@ service Router {
     rpc SendPaymentV2 (SendPaymentRequest) returns (stream lnrpc.Payment);
 
     /*
+    CancelPayment cancels a payment described by the passed
+    CancelPaymentRequest.
+    */
+    rpc CancelPayment (CancelPaymentRequest) returns (CancelPaymentResponse);
+
+    /*
     TrackPaymentV2 returns an update stream for the payment identified by the
     payment hash.
     */
@@ -284,6 +290,14 @@ message SendPaymentRequest {
     If set, an AMP-payment will be attempted.
     */
     bool amp = 22;
+}
+
+message CancelPaymentRequest {
+    // The hash of the payment to cancel.
+    bytes payment_hash = 1;
+}
+
+message CancelPaymentResponse {
 }
 
 message TrackPaymentRequest {

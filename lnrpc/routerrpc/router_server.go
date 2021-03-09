@@ -61,6 +61,10 @@ var (
 			Entity: "offchain",
 			Action: "write",
 		}},
+		"/routerrpc.Router/CancelPayment": {{
+			Entity: "offchain",
+			Action: "write",
+		}},
 		"/routerrpc.Router/SendToRouteV2": {{
 			Entity: "offchain",
 			Action: "write",
@@ -331,6 +335,22 @@ func (s *Server) SendPaymentV2(req *SendPaymentRequest,
 	}
 
 	return s.trackPayment(payment.Identifier(), stream, req.NoInflightUpdates)
+}
+
+// CancelPayment registers an intent to cancel a payment with the given hash.
+// The cancellation is best effort and might not take effect immediately.
+func (s *Server) CancelPayment(_ context.Context,
+	req *CancelPaymentRequest) (*CancelPaymentResponse, error) {
+
+	var hash lntypes.Hash
+	copy(hash[:], req.PaymentHash[:])
+
+	err := s.cfg.Router.CancelPayment(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CancelPaymentResponse{}, nil
 }
 
 // EstimateRouteFee allows callers to obtain a lower bound w.r.t how much it

@@ -209,10 +209,30 @@ lifecycle:
 		}
 
 		// Before we attempt any new shard, we'll check to see if
-		// either we've gone past the payment attempt timeout, or the
-		// router is exiting. In either case, we'll stop this payment
-		// attempt short. If a timeout is not applicable, timeoutChan
-		// will be nil.
+		// either we've gone past the payment attempt timeout, received
+		// request for cancellation, or whether the router is exiting.
+		// If so, we'll stop this payment attempt short.
+		// If a timeout is not applicable, timeoutChan will be nil.
+
+		// Bail if the payment has been marked for cancellation.
+		if p.router.cfg.Control.ShouldCancelPayment(p.identifier) {
+			// By marking the payment failed with the control tower,
+			// no further shards will be launched and we'll return
+			// with an error the moment all active shards have
+			// finished.
+			saveErr := p.router.cfg.Control.Fail(
+				p.identifier, channeldb.FailureReasonCanceled,
+			)
+			if saveErr != nil {
+				return [32]byte{}, nil, saveErr
+			}
+
+			log.Infof("payment attempt cancelled for %v",
+				p.identifier)
+
+			continue lifecycle
+		}
+
 		select {
 		case <-p.timeoutChan:
 			log.Warnf("payment attempt not completed before " +

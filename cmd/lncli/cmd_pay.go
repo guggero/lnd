@@ -141,6 +141,25 @@ func paymentFlags() []cli.Flag {
 	}
 }
 
+var cancelPaymentCommand = cli.Command{
+	Name:     "cancelpayment",
+	Category: "Payments",
+	Usage:    "Cancel a payment.",
+	Description: `
+	Cancel the payment with the specified hash. NOTE: This marks the payment
+	for eventual cancelation by the the payment lifecycle state machine.
+	Confirm cancelation using the 'listpayments' RPC.
+	`,
+	ArgsUsage: "payment_hash",
+	Flags: []cli.Flag{
+		cli.StringFlag{
+			Name:  "payment_hash, r",
+			Usage: "the hash to use within the payment's HTLC",
+		},
+	},
+	Action: cancelPayment,
+}
+
 var sendPaymentCommand = cli.Command{
 	Name:     "sendpayment",
 	Category: "Payments",
@@ -232,6 +251,41 @@ func confirmPayReq(resp *lnrpc.PayReq, amt, feeLimit int64) error {
 		return fmt.Errorf("payment not confirmed")
 	}
 
+	return nil
+}
+
+func cancelPayment(ctx *cli.Context) error {
+	// Show command help if no arguments provided
+	if ctx.NArg() == 0 && ctx.NumFlags() == 0 {
+		_ = cli.ShowCommandHelp(ctx, "cancelpayment")
+		return nil
+	}
+
+	args := ctx.Args()
+	if !args.Present() {
+		return fmt.Errorf("payment hash must be specified")
+	}
+
+	conn := getClientConn(ctx, false)
+	defer conn.Close()
+
+	routerClient := routerrpc.NewRouterClient(conn)
+
+	hash, err := hex.DecodeString(args.First())
+	if err != nil {
+		return err
+	}
+
+	req := &routerrpc.CancelPaymentRequest{
+		PaymentHash: hash,
+	}
+
+	resp, err := routerClient.CancelPayment(context.Background(), req)
+	if err != nil {
+		return err
+	}
+
+	printRespJSON(resp)
 	return nil
 }
 

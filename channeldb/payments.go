@@ -147,7 +147,9 @@ const (
 	// balance to complete the payment.
 	FailureReasonInsufficientBalance FailureReason = 4
 
-	// TODO(halseth): cancel state.
+	// FailureReasonCanceled indicates that the payment was canceled by the
+	// user.
+	FailureReasonCanceled FailureReason = 5
 
 	// TODO(joostjager): Add failure reasons for:
 	// LocalLiquidityInsufficient, RemoteCapacityInsufficient.
@@ -171,6 +173,8 @@ func (r FailureReason) String() string {
 		return "incorrect_payment_details"
 	case FailureReasonInsufficientBalance:
 		return "insufficient_balance"
+	case FailureReasonCanceled:
+		return "user_canceled"
 	}
 
 	return "unknown"

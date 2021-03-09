@@ -254,13 +254,15 @@ type testPayment struct {
 }
 
 type mockControlTowerOld struct {
-	payments   map[lntypes.Hash]*testPayment
-	successful map[lntypes.Hash]struct{}
-	failed     map[lntypes.Hash]channeldb.FailureReason
+	payments      map[lntypes.Hash]*testPayment
+	successful    map[lntypes.Hash]struct{}
+	cancelIntents map[lntypes.Hash]struct{}
+	failed        map[lntypes.Hash]channeldb.FailureReason
 
 	init            chan initArgs
 	registerAttempt chan registerAttemptArgs
 	settleAttempt   chan settleAttemptArgs
+	cancelAttempt   chan bool
 	failAttempt     chan failAttemptArgs
 	failPayment     chan failPaymentArgs
 	fetchInFlight   chan struct{}
@@ -272,9 +274,10 @@ var _ ControlTower = (*mockControlTowerOld)(nil)
 
 func makeMockControlTower() *mockControlTowerOld {
 	return &mockControlTowerOld{
-		payments:   make(map[lntypes.Hash]*testPayment),
-		successful: make(map[lntypes.Hash]struct{}),
-		failed:     make(map[lntypes.Hash]channeldb.FailureReason),
+		payments:      make(map[lntypes.Hash]*testPayment),
+		successful:    make(map[lntypes.Hash]struct{}),
+		cancelIntents: make(map[lntypes.Hash]struct{}),
+		failed:        make(map[lntypes.Hash]channeldb.FailureReason),
 	}
 }
 
@@ -459,8 +462,38 @@ func (m *mockControlTowerOld) Fail(phash lntypes.Hash,
 	}
 
 	m.failed[phash] = reason
+	delete(m.cancelIntents, phash)
 
 	return nil
+}
+
+func (m *mockControlTowerOld) CancelPayment(phash lntypes.Hash) error {
+	m.Lock()
+	defer m.Unlock()
+
+	// Payment must be known.
+	p, ok := m.payments[phash]
+	if !ok {
+		return channeldb.ErrPaymentNotInitiated
+	}
+
+	if m.cancelAttempt != nil {
+		m.cancelAttempt <- true
+	}
+	
+	// Mark the payment as canceled.
+	m.cancelIntents[phash] = struct{}{}
+	m.payments[phash] = p
+
+	return nil
+}
+
+func (m *mockControlTowerOld) ShouldCancelPayment(phash lntypes.Hash) bool {
+	m.Lock()
+	defer m.Unlock()
+
+	_, ok := m.payments[phash]
+	return ok
 }
 
 func (m *mockControlTowerOld) FetchPayment(phash lntypes.Hash) (
@@ -736,4 +769,14 @@ func (m *mockControlTower) SubscribePayment(paymentHash lntypes.Hash) (
 
 	args := m.Called(paymentHash)
 	return args.Get(0).(*ControlTowerSubscriber), args.Error(1)
+}
+
+func (m *mockControlTower) CancelPayment(paymentHash lntypes.Hash) error {
+	args := m.Called(paymentHash)
+	return args.Get(0).(error)
+}
+
+func (m *mockControlTower) ShouldCancelPayment(paymentHash lntypes.Hash) bool {
+	args := m.Called(paymentHash)
+	return args.Get(0).(bool)
 }
