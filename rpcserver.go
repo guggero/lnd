@@ -5709,7 +5709,7 @@ func (r *rpcServer) DeleteAllPayments(ctx context.Context,
 
 	rpcsLog.Debugf("[DeleteAllPayments]")
 
-	if err := r.server.remoteChanDB.DeletePayments(); err != nil {
+	if err := r.server.remoteChanDB.DeletePayments(false, false); err != nil {
 		return nil, err
 	}
 
