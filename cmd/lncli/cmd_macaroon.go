@@ -126,19 +126,9 @@ func bakeMacaroon(ctx *cli.Context) error {
 	// entry if it's a valid entity:action tuple. The content itself is
 	// validated server side. We just make sure we can parse it correctly.
 	for _, permission := range args {
-		tuple := strings.Split(permission, ":")
-		if len(tuple) != 2 {
-			return fmt.Errorf("unable to parse "+
-				"permission tuple: %s", permission)
-		}
-		entity, action := tuple[0], tuple[1]
-		if entity == "" {
-			return fmt.Errorf("invalid permission [%s]. entity "+
-				"cannot be empty", permission)
-		}
-		if action == "" {
-			return fmt.Errorf("invalid permission [%s]. action "+
-				"cannot be empty", permission)
+		entity, action, err := macaroons.ParsePermission(permission)
+		if err != nil {
+			return err
 		}
 
 		// No we can assume that we have a formally valid entity:action
@@ -415,8 +405,17 @@ var constrainMacaroonCommand = cli.Command{
 	ArgsUsage: "[--timeout=] [--ip_address=] [--custom_caveat_condition] " +
 		"input-macaroon-file constrained-macaroon-file",
 	Description: `
-	Add a first-party caveat (constraint/restriction) to an existing
-	macaroon.
+	Add one or more first-party caveat(s) (constraint/restriction) to an
+	existing macaroon.
+
+	The following caveats are supported:
+		--timeout (caveat name 'time-before'): Give the macaroon an
+			expiry date expressed as an RFC3339 timestamp in UTC.
+		--ip_address (caveat name 'ipaddr'): Lock down the macaroon to
+			only be usable from the IP address given. This must
+			correspond to the IP address as the server (lnd) sees it
+			and might be difficult in Tor or VPN setups to find out
+			or keep constant over multiple requests.
 	`,
 	Flags: []cli.Flag{
 		macTimeoutFlag,

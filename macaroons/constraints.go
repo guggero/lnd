@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"gopkg.in/macaroon-bakery.v2/bakery"
 	"net"
 	"strings"
 	"time"
@@ -21,7 +22,46 @@ const (
 	// in the serialized macaroon. We choose a single space as the delimiter
 	// between the because that is also used by the macaroon bakery library.
 	CondLndCustom = "lnd-custom"
+
+	// CondIpAddr is the first party caveat condition name that is used for
+	// adding an IP address restriction to a macaroon.
+	CondIpAddr = "ipaddr"
+
+	// CondRevokePerm is the first party caveat condition name that is used
+	// for revoking one or more permissions from a macaroon. Revoking a
+	// permission in the context of a macaroon means marking a permission
+	// that was originally given as part of the macaroon header/ID section
+	// as no longer being valid without the need for baking a completely new
+	// macaroon. This allows users to tighten the scope of a macaroon's
+	// permissions before giving it to a third party or before sending it
+	// over the wire by attaching an additional first party caveat (which
+	// can be done offline).
+	CondRevokePerm = "revokeperm"
 )
+
+// macaroonKeyType is the type that we use to store and retrieve macaroon
+// specific values from and to a context. A non-native custom type must be used
+// when storing custom values using the context API.
+type macaroonKeyType string
+
+var (
+	// RequiredPermKey is the key we use to identify the required
+	// permissions of an RPC call in its request context.
+	RequiredPermKey = macaroonKeyType("requiredPerm")
+)
+
+// FromContext tries to extract a specific macaroon related value from the given
+// context.
+func FromContext(ctx context.Context, key macaroonKeyType) interface{} {
+	return ctx.Value(key)
+}
+
+// AddToContext adds the given value to the context for easy retrieval later on.
+func AddToContext(ctx context.Context, key macaroonKeyType,
+	value interface{}) context.Context {
+
+	return context.WithValue(ctx, key, value)
+}
 
 // CustomCaveatAcceptor is an interface that contains a single method for
 // checking whether a macaroon with the given custom caveat name should be
@@ -102,7 +142,7 @@ func IPLockConstraint(ipAddr string) func(*macaroon.Macaroon) error {
 // IPLockChecker accepts client IP from the validation context and compares it
 // with IP locked in the macaroon. It is of the `Checker` type.
 func IPLockChecker() (string, checkers.Func) {
-	return "ipaddr", func(ctx context.Context, cond, arg string) error {
+	return CondIpAddr, func(ctx context.Context, cond, arg string) error {
 		// Get peer info and extract IP address from it for macaroon
 		// check.
 		pr, ok := peer.FromContext(ctx)
@@ -119,6 +159,22 @@ func IPLockChecker() (string, checkers.Func) {
 			return fmt.Errorf(msg)
 		}
 		return nil
+	}
+}
+
+// RevokePermConstraint revokes one or more permissions from a macaroon.
+// Revoking a permission in the context of a macaroon means marking a permission
+// that was initially given as part of the macaroon header/ID section as no
+// longer being valid (without the need for baking a completely new macaroon).
+// This allows users to tighten the scope of a macaroon's permissions before
+// giving it to a third party or before sending it over the wire by attaching an
+// additional first party caveat (which can be done offline).
+func RevokePermConstraint(perms []bakery.Op) func(*macaroon.Macaroon) error {
+	return func(mac *macaroon.Macaroon) error {
+		caveat := checkers.Condition(
+			CondRevokePerm, FormatPermissions(perms),
+		)
+		return mac.AddFirstPartyCaveat([]byte(caveat))
 	}
 }
 
@@ -247,4 +303,59 @@ func GetCustomCaveatCondition(mac *macaroon.Macaroon,
 
 	// We didn't find a condition for the given custom caveat name.
 	return ""
+}
+
+// FormatPermissions formats a slice of macaroon permissions in the format:
+// entity:action,entity:action...
+func FormatPermissions(perms []bakery.Op) string {
+	stringPerms := make([]string, len(perms))
+	for idx, op := range perms {
+		stringPerms[idx] = fmt.Sprintf("%s:%s", op.Entity, op.Action)
+	}
+
+	return strings.Join(stringPerms, ",")
+}
+
+// ParsePermissions attempts to parse a list of macaroon permissions from the
+// format:
+// entity:action,entity:action...
+func ParsePermissions(s string) ([]bakery.Op, error) {
+	if len(s) == 0 {
+		return nil, nil
+	}
+
+	pairs := strings.Split(s, ",")
+	perms := make([]bakery.Op, len(pairs))
+	for idx, pair := range pairs {
+		entity, action, err := ParsePermission(pair)
+		if err != nil {
+			return nil, err
+		}
+
+		perms[idx].Entity = entity
+		perms[idx].Action = action
+	}
+
+	return perms, nil
+}
+
+// ParsePermission attempts to parse a single entity:action pair from the given
+// string.
+func ParsePermission(permission string) (string, string, error) {
+	tuple := strings.Split(permission, ":")
+	if len(tuple) != 2 {
+		return "", "", fmt.Errorf("unable to parse permission tuple: "+
+			"%s", permission)
+	}
+	entity, action := tuple[0], tuple[1]
+	if entity == "" {
+		return "", "", fmt.Errorf("invalid permission [%s]. entity "+
+			"cannot be empty", permission)
+	}
+	if action == "" {
+		return "", "", fmt.Errorf("invalid permission [%s]. action "+
+			"cannot be empty", permission)
+	}
+
+	return entity, action, nil
 }
