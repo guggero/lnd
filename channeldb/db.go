@@ -1842,11 +1842,7 @@ func MakeTestDB(t *testing.T, modifiers ...OptionModifier) (*DB, error) {
 	tempDirName := t.TempDir()
 
 	// Next, create channeldb for the first time.
-	backend, backendCleanup, err := kvdb.GetTestBackend(tempDirName, "cdb")
-	if err != nil {
-		backendCleanup()
-		return nil, err
-	}
+	backend, backendCleanup := kvdb.GetTestBackend(t, tempDirName, "cdb")
 
 	cdb, err := CreateWithBackend(backend, modifiers...)
 	if err != nil {

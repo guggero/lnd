@@ -33,8 +33,7 @@ func TestOpenWithCreate(t *testing.T) {
 
 	// Next, open thereby creating channeldb for the first time.
 	dbPath := filepath.Join(tempDirName, "cdb")
-	backend, cleanup, err := kvdb.GetTestBackend(dbPath, "cdb")
-	require.NoError(t, err, "unable to get test db backend")
+	backend, cleanup := kvdb.GetTestBackend(t, dbPath, "cdb")
 	t.Cleanup(cleanup)
 
 	cdb, err := CreateWithBackend(backend)
@@ -69,8 +68,7 @@ func TestWipe(t *testing.T) {
 
 	// Next, open thereby creating channeldb for the first time.
 	dbPath := filepath.Join(tempDirName, "cdb")
-	backend, cleanup, err := kvdb.GetTestBackend(dbPath, "cdb")
-	require.NoError(t, err, "unable to get test db backend")
+	backend, cleanup := kvdb.GetTestBackend(t, dbPath, "cdb")
 	t.Cleanup(cleanup)
 
 	fullDB, err := CreateWithBackend(backend)
@@ -134,7 +132,7 @@ func TestFetchClosedChannelForID(t *testing.T) {
 		}
 	}
 
-	// Now run though them all again and make sure we are able to retrieve
+	// Now run through them all again and make sure we are able to retrieve
 	// summaries from the DB.
 	for i := uint32(0); i < numChans; i++ {
 		state.FundingOutpoint.Index = i

@@ -421,8 +421,7 @@ func TestMigrationReversion(t *testing.T) {
 
 	tempDirName := t.TempDir()
 
-	backend, cleanup, err := kvdb.GetTestBackend(tempDirName, "cdb")
-	require.NoError(t, err, "unable to get test db backend")
+	backend, cleanup := kvdb.GetTestBackend(t, tempDirName, "cdb")
 
 	cdb, err := CreateWithBackend(backend)
 	if err != nil {
@@ -446,8 +445,7 @@ func TestMigrationReversion(t *testing.T) {
 
 	require.NoError(t, err, "unable to increase db version")
 
-	backend, cleanup, err = kvdb.GetTestBackend(tempDirName, "cdb")
-	require.NoError(t, err, "unable to get test db backend")
+	backend, cleanup = kvdb.GetTestBackend(t, tempDirName, "cdb")
 	t.Cleanup(cleanup)
 
 	_, err = CreateWithBackend(backend)
