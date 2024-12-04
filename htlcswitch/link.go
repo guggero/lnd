@@ -3029,7 +3029,7 @@ func (l *channelLink) CheckHtlcForward(payHash [32]byte, incomingHtlcAmt,
 	amtToForward lnwire.MilliSatoshi, incomingTimeout,
 	outgoingTimeout uint32, inboundFee models.InboundFee,
 	heightNow uint32, originalScid lnwire.ShortChannelID,
-	inWireCustomRecords lnwire.CustomRecords) *LinkError {
+	customRecords lnwire.CustomRecords) *LinkError {
 
 	l.RLock()
 	policy := l.cfg.FwrdingPolicy
@@ -3078,7 +3078,7 @@ func (l *channelLink) CheckHtlcForward(payHash [32]byte, incomingHtlcAmt,
 	// Check whether the outgoing htlc satisfies the channel policy.
 	err := l.canSendHtlc(
 		policy, payHash, amtToForward, outgoingTimeout, heightNow,
-		originalScid, inWireCustomRecords,
+		originalScid, customRecords,
 	)
 	if err != nil {
 		return err
@@ -3115,7 +3115,7 @@ func (l *channelLink) CheckHtlcForward(payHash [32]byte, incomingHtlcAmt,
 // payments for which there is no corresponding incoming htlc.
 func (l *channelLink) CheckHtlcTransit(payHash [32]byte,
 	amt lnwire.MilliSatoshi, timeout uint32, heightNow uint32,
-	inWireCustomRecords lnwire.CustomRecords) *LinkError {
+	customRecords lnwire.CustomRecords) *LinkError {
 
 	l.RLock()
 	policy := l.cfg.FwrdingPolicy
@@ -3126,7 +3126,7 @@ func (l *channelLink) CheckHtlcTransit(payHash [32]byte,
 	// to occur.
 	return l.canSendHtlc(
 		policy, payHash, amt, timeout, heightNow, hop.Source,
-		inWireCustomRecords,
+		customRecords,
 	)
 }
 
@@ -3135,7 +3135,7 @@ func (l *channelLink) CheckHtlcTransit(payHash [32]byte,
 func (l *channelLink) canSendHtlc(policy models.ForwardingPolicy,
 	payHash [32]byte, amt lnwire.MilliSatoshi, timeout uint32,
 	heightNow uint32, originalScid lnwire.ShortChannelID,
-	inWireCustomRecords lnwire.CustomRecords) *LinkError {
+	customRecords lnwire.CustomRecords) *LinkError {
 
 	// As our first sanity check, we'll ensure that the passed HTLC isn't
 	// too small for the next hop. If so, then we'll cancel the HTLC
@@ -3200,7 +3200,7 @@ func (l *channelLink) canSendHtlc(policy models.ForwardingPolicy,
 		l.cfg.AuxTrafficShaper,
 		func(ts AuxTrafficShaper) fn.Result[OptionalBandwidth] {
 			var htlcBlob fn.Option[tlv.Blob]
-			blob, err := inWireCustomRecords.Serialize()
+			blob, err := customRecords.Serialize()
 			if err != nil {
 				return fn.Err[OptionalBandwidth](
 					fmt.Errorf("unable to serialize "+

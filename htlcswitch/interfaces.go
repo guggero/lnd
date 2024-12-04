@@ -263,7 +263,7 @@ type ChannelLink interface {
 		amtToForward lnwire.MilliSatoshi, incomingTimeout,
 		outgoingTimeout uint32, inboundFee models.InboundFee,
 		heightNow uint32, scid lnwire.ShortChannelID,
-		inWireCustomRecords lnwire.CustomRecords) *LinkError
+		customRecords lnwire.CustomRecords) *LinkError
 
 	// CheckHtlcTransit should return a nil error if the passed HTLC details
 	// satisfy the current channel policy.  Otherwise, a LinkError with a
@@ -272,7 +272,7 @@ type ChannelLink interface {
 	// payments for which there is no corresponding incoming htlc.
 	CheckHtlcTransit(payHash [32]byte, amt lnwire.MilliSatoshi,
 		timeout uint32, heightNow uint32,
-		inWireCustomRecords lnwire.CustomRecords) *LinkError
+		customRecords lnwire.CustomRecords) *LinkError
 
 	// Stats return the statistics of channel link. Number of updates,
 	// total sent/received milli-satoshis.

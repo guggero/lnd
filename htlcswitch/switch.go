@@ -912,11 +912,13 @@ func (s *Switch) getLocalLink(pkt *htlcPacket, htlc *lnwire.UpdateAddHTLC) (
 		)
 	}
 
+	log.Debugf("Check HTLC transit for packet %v", spew.Sdump(pkt))
+
 	// Ensure that the htlc satisfies the outgoing channel policy.
 	currentHeight := atomic.LoadUint32(&s.bestHeight)
 	htlcErr := link.CheckHtlcTransit(
 		htlc.PaymentHash, htlc.Amount, htlc.Expiry, currentHeight,
-		pkt.inWireCustomRecords,
+		htlc.CustomRecords,
 	)
 	if htlcErr != nil {
 		log.Errorf("Link %v policy for local forward not "+
@@ -2881,6 +2883,8 @@ func (s *Switch) handlePacketAdd(packet *htlcPacket,
 				OutgoingFailureLinkNotEligible,
 			)
 		} else {
+			log.Debugf("Check HTLC forwad for packet %v", spew.Sdump(packet))
+
 			// We'll ensure that the HTLC satisfies the current
 			// forwarding conditions of this target link.
 			currentHeight := atomic.LoadUint32(&s.bestHeight)
@@ -2889,7 +2893,7 @@ func (s *Switch) handlePacketAdd(packet *htlcPacket,
 				packet.amount, packet.incomingTimeout,
 				packet.outgoingTimeout, packet.inboundFee,
 				currentHeight, packet.originalOutgoingChanID,
-				packet.inWireCustomRecords,
+				htlc.CustomRecords,
 			)
 		}
 
