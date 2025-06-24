@@ -3324,6 +3324,8 @@ message Hop {
     MPP payments.
     */
     uint64 total_amt_msat = 16;
+
+    uint32 new_totally_useless_field = 17 [deprecated = true];
 }
 
 message MPPRecord {
