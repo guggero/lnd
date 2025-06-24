@@ -35,8 +35,7 @@ type RecordProducerT[T any] interface {
 // is useful to wrap a given record in this utility type, which also serves as
 // an extra type annotation. The underlying type of the record is retained.
 func NewRecordT[T TlvType, K any, V RecordProducerT[K]](
-	record K,
-) RecordT[T, K] {
+	record K) RecordT[T, K] {
 
 	return RecordT[T, K]{
 		Val: record,
