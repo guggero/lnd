@@ -202,57 +202,6 @@ func (svc *Service) ValidateMacaroon(ctx context.Context,
 	)
 }
 
-// CheckMacAuth checks that the macaroon is not disobeying any caveats and is
-// authorized to perform the operation the user wants to perform.
-func (svc *Service) CheckMacAuth(ctx context.Context, macBytes []byte,
-	requiredPermissions []bakery.Op, fullMethod string) error {
-
-	// With the macaroon obtained, we'll now unmarshal it from binary into
-	// its concrete struct representation.
-	mac := &macaroon.Macaroon{}
-	err := mac.UnmarshalBinary(macBytes)
-	if err != nil {
-		return err
-	}
-
-	// Ensure that the macaroon is using the exact same version as we
-	// expect. In the future, we can relax this check to phase in new
-	// versions.
-	if mac.Version() != macaroon.V2 {
-		return fmt.Errorf("%w: %v", ErrUnknownVersion,
-			mac.Version())
-	}
-
-	// Run a similar version check on the ID used for the macaroon as well.
-	const minIDLength = 1
-	if len(mac.Id()) < minIDLength {
-		return ErrInvalidID
-	}
-	if mac.Id()[0] != byte(bakery.Version3) {
-		return ErrInvalidID
-	}
-
-	// Check the method being called against the permitted operation, the
-	// expiration time and IP address and return the result.
-	authChecker := svc.Checker.Auth(macaroon.Slice{mac})
-	_, err = authChecker.Allow(ctx, requiredPermissions...)
-
-	// If the macaroon contains broad permissions and checks out, we're
-	// done.
-	if err == nil {
-		return nil
-	}
-
-	// To also allow the special permission of "uri:<FullMethod>" to be a
-	// valid permission, we need to check it manually in case there is no
-	// broader scope permission defined.
-	_, err = authChecker.Allow(ctx, bakery.Op{
-		Entity: PermissionEntityCustomURI,
-		Action: fullMethod,
-	})
-	return err
-}
-
 // Close closes the database that underlies the RootKeyStore and zeroes the
 // encryption keys.
 func (svc *Service) Close() error {
@@ -347,6 +296,57 @@ func (svc *Service) ChangePassword(oldPw, newPw []byte) error {
 	}
 
 	return nil
+}
+
+// CheckMacAuth checks that the macaroon is not disobeying any caveats and is
+// authorized to perform the operation the user wants to perform.
+func (svc *Service) CheckMacAuth(ctx context.Context, macBytes []byte,
+	requiredPermissions []bakery.Op, fullMethod string) error {
+
+	// With the macaroon obtained, we'll now unmarshal it from binary into
+	// its concrete struct representation.
+	mac := &macaroon.Macaroon{}
+	err := mac.UnmarshalBinary(macBytes)
+	if err != nil {
+		return err
+	}
+
+	// Ensure that the macaroon is using the exact same version as we
+	// expect. In the future, we can relax this check to phase in new
+	// versions.
+	if mac.Version() != macaroon.V2 {
+		return fmt.Errorf("%w: %v", ErrUnknownVersion,
+			mac.Version())
+	}
+
+	// Run a similar version check on the ID used for the macaroon as well.
+	const minIDLength = 1
+	if len(mac.Id()) < minIDLength {
+		return ErrInvalidID
+	}
+	if mac.Id()[0] != byte(bakery.Version3) {
+		return ErrInvalidID
+	}
+
+	// Check the method being called against the permitted operation, the
+	// expiration time and IP address and return the result.
+	authChecker := svc.Checker.Auth(macaroon.Slice{mac})
+	_, err = authChecker.Allow(ctx, requiredPermissions...)
+
+	// If the macaroon contains broad permissions and checks out, we're
+	// done.
+	if err == nil {
+		return nil
+	}
+
+	// To also allow the special permission of "uri:<FullMethod>" to be a
+	// valid permission, we need to check it manually in case there is no
+	// broader scope permission defined.
+	_, err = authChecker.Allow(ctx, bakery.Op{
+		Entity: PermissionEntityCustomURI,
+		Action: fullMethod,
+	})
+	return err
 }
 
 // RawMacaroonFromContext is a helper function that extracts a raw macaroon
