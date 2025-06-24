@@ -5601,6 +5601,9 @@
           "type": "string",
           "format": "uint64",
           "description": "The total amount that is sent to the recipient (possibly across multiple\nHTLCs), as specified by the sender when making a payment to a blinded path.\nThis value is only set in the final hop payload of a blinded payment. This\nvalue is analogous to the MPPRecord that is used for regular (non-blinded)\nMPP payments."
+        },
+        "important_info": {
+          "type": "string"
         }
       }
     },

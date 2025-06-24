@@ -3324,6 +3324,8 @@ message Hop {
     MPP payments.
     */
     uint64 total_amt_msat = 16;
+
+    string important_info = 17;
 }
 
 message MPPRecord {
