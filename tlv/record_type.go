@@ -34,7 +34,7 @@ type RecordProducerT[T any] interface {
 // NewRecordT creates a new RecordT type from a given RecordProducer type. This
 // is useful to wrap a given record in this utility type, which also serves as
 // an extra type annotation. The underlying type of the record is retained.
-func NewRecordT[T TlvType, K any, V RecordProducerT[K]](
+func NewRecordT[T TlvType, K any](
 	record K,
 ) RecordT[T, K] {
 
