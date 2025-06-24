@@ -225,7 +225,7 @@ func (svc *Service) CheckMacAuth(ctx context.Context, macBytes []byte,
 
 	// Run a similar version check on the ID used for the macaroon as well.
 	const minIDLength = 1
-	if len(mac.Id()) < minIDLength {
+	if len(mac.Id()) < minIDLength || len(mac.Id()) > bakery.KeyLen {
 		return ErrInvalidID
 	}
 	if mac.Id()[0] != byte(bakery.Version3) {
